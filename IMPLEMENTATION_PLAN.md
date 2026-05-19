@@ -21,7 +21,7 @@
 
 ---
 
-## Phase 2 — Hybrid Retrieval + Reranking + Citations
+## Phase 2 — COMPLETE ✓ — Hybrid Retrieval + Reranking + Citations
 
 ### Pipeline change
 
@@ -46,6 +46,21 @@ Phase 2:  question → [vector top-20 + BM25 top-20] → RRF merge top-20
 | 8 | `requirements.txt` | MODIFY — add new deps |
 
 **Do not touch:** `src/chunker.py`, `src/ingest.py`, `src/vectorstore.py`
+
+**Deviations from original plan (intentional):**
+- Used `bm25s` instead of `rank-bm25` — no NLTK corpus download required
+- Reranker uses HF Inference API (`BAAI/bge-reranker-base`) instead of local `sentence-transformers` CrossEncoder — required for low-spec hardware (no local model loading)
+- `BM25_INDEX_PATH` is a directory (`bm25_index/`) not a `.pkl` file — bm25s saves multiple index files
+- BM25 index built via GitHub Actions workflow (`.github/workflows/build_bm25.yml`) due to RAM constraints on dev machine
+- `src/chunker.py` infinite loop bug fixed: `start = next_start if next_start > start else break_pos`
+
+**Definition of done — verified:**
+
+| Question | Top source cited |
+|----------|-----------------|
+| `"what does move do in Rust?"` | ch13-01-closures.md + ownership context |
+| `"how does Box<T> work?"` | ch15-01-box.md |
+| `"what is unsafe?"` | ch20-01-unsafe-rust.md |
 
 ---
 
