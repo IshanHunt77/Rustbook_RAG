@@ -5,6 +5,8 @@ import time
 from src.ingest import load_book
 from src.chunker import chunk_text
 from src.vectorstore import RustBookVectorStore, _hf_embed
+from src.bm25_store import BM25Store
+from src.config import CHUNK_SIZE, CHUNK_OVERLAP, BM25_INDEX_PATH
 
 
 def _fmt(seconds):
@@ -20,20 +22,6 @@ def _p(*args, **kwargs):
 def main():
     _p("=== Build Rust Book Vector Index ===\n")
 
-    # Validate token before doing any real work
-    token = os.environ.get("HUGGINGFACE_API_TOKEN", "")
-    if not token:
-        _p("ERROR: HUGGINGFACE_API_TOKEN is not set.")
-        _p("  Get a free token at https://huggingface.co/settings/tokens")
-        sys.exit(1)
-    _p("Step 0: Validating HuggingFace token...")
-    try:
-        _hf_embed(["test"], token)
-        _p("  Token OK — HF Inference API reachable.\n")
-    except Exception as e:
-        _p(f"  Token/API check FAILED: {e}")
-        sys.exit(1)
-
     _p("Step 1: Loading chapters (cached in data/)...")
     chapters = load_book(cache_dir="data")
     total_chapters = len(chapters)
@@ -41,6 +29,24 @@ def main():
 
     _p("Step 2: Initialising vector store...")
     store = RustBookVectorStore(persist_dir="chroma_db")
+
+    # Only validate HF token if there are chapters that need embedding
+    needs_embedding = [c for c in chapters if not store.has_source(c["filepath"])]
+    if needs_embedding:
+        token = os.environ.get("HF_TOKEN", "")
+        if not token:
+            _p("ERROR: HF_TOKEN is not set.")
+            _p("  Get a free token at https://huggingface.co/settings/tokens")
+            sys.exit(1)
+        _p("Step 0: Validating HuggingFace token...")
+        try:
+            _hf_embed(["test"], token)
+            _p("  Token OK — HF Inference API reachable.\n")
+        except Exception as e:
+            _p(f"  Token/API check FAILED: {e}")
+            sys.exit(1)
+    else:
+        _p(f"  All {total_chapters} chapters already indexed — skipping token validation.\n")
     existing = store.count()
     if existing > 0:
         _p(f"  Resuming — {existing} chunks already in index.\n")
@@ -51,18 +57,12 @@ def main():
 
     total_chunks = 0
     skipped = 0
+    all_chunks = []
     build_start = time.time()
 
     for idx, chapter in enumerate(chapters, 1):
-        if store.has_source(chapter["filepath"]):
-            skipped += 1
-            pct = idx / total_chapters * 100
-            _p(f"  {idx:>3}  {pct:>4.1f}%  {chapter['title'][:42]:<42}  {'skip':>6}")
-            continue
-
-        chap_start = time.time()
-
-        chunks = chunk_text(chapter["content"], chunk_size=1500, overlap=350)
+        # Always chunk — BM25 needs every chapter regardless of vector index state
+        raw = chunk_text(chapter["content"], chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
         chapter_chunks = [
             {
                 "id": f"{chapter['filepath']}::{i}",
@@ -73,8 +73,17 @@ def main():
                     "chunk_index": i,
                 },
             }
-            for i, chunk in enumerate(chunks)
+            for i, chunk in enumerate(raw)
         ]
+        all_chunks.extend(chapter_chunks)
+
+        if store.has_source(chapter["filepath"]):
+            skipped += 1
+            pct = idx / total_chapters * 100
+            _p(f"  {idx:>3}  {pct:>4.1f}%  {chapter['title'][:42]:<42}  {'skip':>6}")
+            continue
+
+        chap_start = time.time()
         store.add_chunks(chapter_chunks)
         total_chunks += len(chapter_chunks)
 
@@ -95,6 +104,11 @@ def main():
     _p(f"\n  Done — {total_chunks} new chunks indexed in {_fmt(total_time)}.")
     if skipped:
         _p(f"  ({skipped} chapters were already indexed and skipped.)")
+
+    _p(f"\nStep 4: Building BM25 keyword index ({len(all_chunks)} chunks)...")
+    bm25 = BM25Store()
+    bm25.build(all_chunks, path=BM25_INDEX_PATH)
+    _p("  Done.")
 
 
 if __name__ == "__main__":

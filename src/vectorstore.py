@@ -48,7 +48,7 @@ class RustBookVectorStore:
         self._token = os.environ.get("HF_TOKEN", "")
         if not self._token:
             raise EnvironmentError(
-                "Set the HUGGINGFACE_API_TOKEN environment variable before running.\n"
+                "Set the HF_TOKEN environment variable before running.\n"
                 "  Get a free token at https://huggingface.co/settings/tokens"
             )
         self.client = chromadb.PersistentClient(
@@ -57,6 +57,7 @@ class RustBookVectorStore:
         )
         self.collection = self.client.get_or_create_collection(
             name=COLLECTION_NAME,
+            embedding_function=None,
             metadata={"hnsw:space": "cosine"},
         )
 
