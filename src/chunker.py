@@ -73,6 +73,7 @@ def chunk_text(text, chunk_size=1500, overlap=350):
         chunk = text[start:break_pos].strip()
         if chunk:
             chunks.append(chunk)
-        start = max(0, break_pos - overlap)
+        next_start = max(0, break_pos - overlap)
+        start = next_start if next_start > start else break_pos
 
     return chunks
