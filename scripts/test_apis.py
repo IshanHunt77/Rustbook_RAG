@@ -178,7 +178,7 @@ def test_ragas_evaluate():
     from ragas.llms import LangchainLLMWrapper
     from langchain_groq import ChatGroq
 
-    llm = LangchainLLMWrapper(ChatGroq(model="llama-3.3-70b-versatile", api_key=GROQ_API_KEY))
+    llm = LangchainLLMWrapper(ChatGroq(model="llama-3.1-8b-instant", api_key=GROQ_API_KEY))
 
     dataset = EvaluationDataset.from_list([
         {

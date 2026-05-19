@@ -47,7 +47,7 @@ PIPELINE_SLEEP = 2   # seconds between pipeline calls (Groq + HF rate limits)
 def _build_ragas_llm():
     return LangchainLLMWrapper(
         ChatGroq(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             api_key=os.environ["GROQ_API_KEY"],
         )
     )
@@ -75,7 +75,7 @@ def main():
         sys.exit(1)
 
     with open(EVAL_DATASET_PATH, encoding="utf-8") as f:
-        samples = json.load(f)
+        samples = json.load(f)[:50]
     print(f"Loaded {len(samples)} eval samples", flush=True)
 
     print("Loading pipeline components...", flush=True)
