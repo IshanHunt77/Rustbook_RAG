@@ -15,6 +15,10 @@ import time
 import warnings
 from pathlib import Path
 
+# Ensure project root is on sys.path so `src.*` imports work when running
+# from scripts/ or from GitHub Actions working directory
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # ChromaDB requires SelectorEventLoop on Windows
