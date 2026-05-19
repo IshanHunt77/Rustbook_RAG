@@ -26,6 +26,7 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from ragas import evaluate, EvaluationDataset
+from ragas.run_config import RunConfig
 from ragas.metrics import Faithfulness, AnswerRelevancy, ContextRecall
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
@@ -47,7 +48,7 @@ PIPELINE_SLEEP = 2   # seconds between pipeline calls (Groq + HF rate limits)
 def _build_ragas_llm():
     return LangchainLLMWrapper(
         ChatGroq(
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             api_key=os.environ["GROQ_API_KEY"],
         )
     )
@@ -75,7 +76,7 @@ def main():
         sys.exit(1)
 
     with open(EVAL_DATASET_PATH, encoding="utf-8") as f:
-        samples = json.load(f)[:50]
+        samples = json.load(f)[:30]
     print(f"Loaded {len(samples)} eval samples", flush=True)
 
     print("Loading pipeline components...", flush=True)
@@ -126,7 +127,8 @@ def main():
     ]
 
     dataset = EvaluationDataset.from_list(ragas_rows)
-    result = evaluate(dataset, metrics=metrics)
+    run_config = RunConfig(timeout=120, max_retries=3)
+    result = evaluate(dataset, metrics=metrics, run_config=run_config)
 
     df = result.to_pandas()
     mean_faith = float(df["faithfulness"].mean())
