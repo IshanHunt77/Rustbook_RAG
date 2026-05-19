@@ -1,0 +1,62 @@
+name: Evaluate RAG Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PYTHONUNBUFFERED: "1"
+  TQDM_DISABLE: "1"
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify eval dataset exists
+        run: |
+          test -f data/eval_dataset.json || (echo "ERROR: data/eval_dataset.json missing — run generate_dataset workflow first" && exit 1)
+          echo "Eval dataset: $(python -c "import json; d=json.load(open('data/eval_dataset.json')); print(len(d), 'samples')")"
+
+      - name: Cache ChromaDB vector store
+        uses: actions/cache@v4
+        id: chroma-cache
+        with:
+          path: chroma_db/
+          key: chroma-${{ hashFiles('data/*.md') }}
+
+      - name: Build vector index (cache miss only)
+        if: steps.chroma-cache.outputs.cache-hit != 'true'
+        run: python -u build_index.py
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
+      - name: Run evaluation
+        run: python -u scripts/evaluate.py
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: results/eval_report.json
+          retention-days: 30
+
+      - name: CI gate
+        run: python scripts/ci_check.py

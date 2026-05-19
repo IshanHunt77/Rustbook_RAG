@@ -5,3 +5,5 @@ __pycache__/
 *.pyc
 *.pyo
 results/
+inher.cpp
+inher.exe
