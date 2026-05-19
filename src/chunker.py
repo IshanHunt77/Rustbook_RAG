@@ -1,8 +1,8 @@
 import re
+import bisect
 
 
 def _code_fence_ranges(text):
-    """Return list of (start, end) char ranges that are inside ```...``` blocks."""
     ranges = []
     pos = 0
     while True:
@@ -17,13 +17,33 @@ def _code_fence_ranges(text):
     return ranges
 
 
-def _inside_code_fence(pos, fence_ranges):
-    return any(s <= pos <= e for s, e in fence_ranges)
+def _inside_code_fence(pos, starts, ends):
+    idx = bisect.bisect_right(starts, pos) - 1
+    return idx >= 0 and pos <= ends[idx]
+
+
+def _valid_breaks(text, pattern, offset, fence_starts, fence_ends):
+    positions = []
+    pos = 0
+    while True:
+        idx = text.find(pattern, pos)
+        if idx == -1:
+            break
+        if not _inside_code_fence(idx, fence_starts, fence_ends):
+            positions.append(idx + offset)
+        pos = idx + 1
+    return positions
 
 
 def chunk_text(text, chunk_size=1500, overlap=350):
     text = re.sub(r'\n{3,}', '\n\n', text).strip()
     fence_ranges = _code_fence_ranges(text)
+    fence_starts = [s for s, _ in fence_ranges]
+    fence_ends   = [e for _, e in fence_ranges]
+
+    para_breaks = _valid_breaks(text, '\n\n', 0,  fence_starts, fence_ends)
+    sent_breaks = _valid_breaks(text, '. ',  +2, fence_starts, fence_ends)
+
     chunks = []
     start = 0
 
@@ -36,29 +56,16 @@ def chunk_text(text, chunk_size=1500, overlap=350):
                 chunks.append(chunk)
             break
 
-        # prefer paragraph boundary outside a code fence
         break_pos = -1
-        search_end = end
-        while search_end > start:
-            candidate = text.rfind('\n\n', start, search_end)
-            if candidate <= start:
-                break
-            if not _inside_code_fence(candidate, fence_ranges):
-                break_pos = candidate
-                break
-            search_end = candidate  # try earlier
 
-        # fall back to sentence boundary outside a code fence
+        idx = bisect.bisect_right(para_breaks, end) - 1
+        if idx >= 0 and para_breaks[idx] > start:
+            break_pos = para_breaks[idx]
+
         if break_pos <= start:
-            search_end = end
-            while search_end > start:
-                candidate = text.rfind('. ', start, search_end)
-                if candidate <= start:
-                    break
-                if not _inside_code_fence(candidate, fence_ranges):
-                    break_pos = candidate + 2
-                    break
-                search_end = candidate
+            idx = bisect.bisect_right(sent_breaks, end) - 1
+            if idx >= 0 and sent_breaks[idx] > start:
+                break_pos = sent_breaks[idx]
 
         if break_pos <= start:
             break_pos = end
