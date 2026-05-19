@@ -3,9 +3,14 @@ name: Build BM25 Index
 on:
   workflow_dispatch:
 
+env:
+  TQDM_DISABLE: "1"
+  PYTHONUNBUFFERED: "1"
+
 jobs:
   build-bm25:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repo (includes data/ markdown files)
@@ -19,14 +24,32 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Build BM25 index
-        run: python -u build_bm25.py
+      - name: Verify environment
+        run: |
+          python --version
+          python -c "import bm25s; print('bm25s', bm25s.__version__)"
+          python -c "import numpy; print('numpy', numpy.__version__)"
+          echo "data/ file count: $(ls data/*.md 2>/dev/null | wc -l)"
+
+      - name: Step 1 - Chunk markdown files
+        run: python -u build_bm25.py --chunks-only
+
+      - name: Step 2 - Build BM25 index from corpus
+        run: python -u build_bm25.py --index-only
 
       - name: Upload bm25_index as artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: bm25-index
           path: bm25_index/
           retention-days: 7
 
-          
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-logs
+          path: |
+            bm25_index/corpus.json
+          retention-days: 3
