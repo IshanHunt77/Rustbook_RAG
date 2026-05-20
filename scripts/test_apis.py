@@ -200,7 +200,7 @@ def test_ragas_evaluate():
         },
     ])
 
-    # Faithfulness + ContextRecall only — both LLM-only, no embeddings needed
+    # Faithfulness + ContextRecall only — no n>1 calls, no embeddings needed
     metrics = [Faithfulness(llm=llm), ContextRecall(llm=llm)]
     result = evaluate(dataset, metrics=metrics)
     df = result.to_pandas()

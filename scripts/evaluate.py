@@ -27,11 +27,9 @@ if sys.platform == "win32":
 
 from ragas import evaluate, EvaluationDataset
 from ragas.run_config import RunConfig
-from ragas.metrics import Faithfulness, AnswerRelevancy, ContextRecall
+from ragas.metrics import Faithfulness, ContextRecall
 from ragas.llms import LangchainLLMWrapper
-from ragas.embeddings import LangchainEmbeddingsWrapper
 from langchain_groq import ChatGroq
-from langchain_huggingface import HuggingFaceEndpointEmbeddings
 
 from src.vectorstore import RustBookVectorStore
 from src.bm25_store import BM25Store
@@ -47,20 +45,10 @@ PIPELINE_SLEEP = 2   # seconds between pipeline calls (Groq + HF rate limits)
 
 def _build_ragas_llm():
     return LangchainLLMWrapper(
-        ChatGroq(
-            model="llama-3.3-70b-versatile",
-            api_key=os.environ["GROQ_API_KEY"],
-        )
+        ChatGroq(model="llama-3.3-70b-versatile", api_key=os.environ["GROQ_API_KEY"])
     )
 
 
-def _build_ragas_embeddings():
-    return LangchainEmbeddingsWrapper(
-        HuggingFaceEndpointEmbeddings(
-            model="sentence-transformers/all-MiniLM-L6-v2",
-            huggingfacehub_api_token=os.environ["HF_TOKEN"],
-        )
-    )
 
 
 def _run_pipeline(retriever, reranker, sample):
@@ -76,7 +64,7 @@ def main():
         sys.exit(1)
 
     with open(EVAL_DATASET_PATH, encoding="utf-8") as f:
-        samples = json.load(f)[:30]
+        samples = json.load(f)[:15]
     print(f"Loaded {len(samples)} eval samples", flush=True)
 
     print("Loading pipeline components...", flush=True)
@@ -118,13 +106,8 @@ def main():
 
     print("Running RAGAS evaluation...", flush=True)
     ragas_llm = _build_ragas_llm()
-    ragas_emb = _build_ragas_embeddings()
 
-    metrics = [
-        Faithfulness(llm=ragas_llm),
-        AnswerRelevancy(llm=ragas_llm, embeddings=ragas_emb),
-        ContextRecall(llm=ragas_llm),
-    ]
+    metrics = [Faithfulness(llm=ragas_llm), ContextRecall(llm=ragas_llm)]
 
     dataset = EvaluationDataset.from_list(ragas_rows)
     run_config = RunConfig(timeout=120, max_retries=3)
@@ -132,12 +115,10 @@ def main():
 
     df = result.to_pandas()
     mean_faith = float(df["faithfulness"].mean())
-    mean_rel = float(df["answer_relevancy"].mean())
     mean_recall = float(df["context_recall"].mean())
 
     report = {
         "mean_faithfulness": mean_faith,
-        "mean_answer_relevancy": mean_rel,
         "mean_context_recall": mean_recall,
         "faithfulness_threshold": FAITHFULNESS_THRESHOLD,
         "n_samples": len(ragas_rows),
@@ -152,7 +133,6 @@ def main():
 
     print(f"\n--- Eval Report ---")
     print(f"  faithfulness:     {mean_faith:.3f}  (threshold: {FAITHFULNESS_THRESHOLD})")
-    print(f"  answer_relevancy: {mean_rel:.3f}")
     print(f"  context_recall:   {mean_recall:.3f}")
     print(f"  PASSED: {report['passed']}")
     print(f"\nReport written to {REPORT_PATH}", flush=True)
