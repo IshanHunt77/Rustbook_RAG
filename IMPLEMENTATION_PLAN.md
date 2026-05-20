@@ -172,37 +172,54 @@ sentence-transformers>=2.7.0
 
 ---
 
-## Phase 3 — Evaluation & CI Gate
+## Phase 3 — COMPLETE ✓ — Evaluation & CI Gate
 
 ### Files
 
 | File | Role |
 |------|------|
-| `scripts/generate_dataset.py` | One-time: generates 200-250 Q/A pairs from chunks via LLM |
-| `data/eval_dataset.json` | `{id, question, reference_answer, source_chunk_id}` per entry |
-| `scripts/evaluate.py` | Runs full pipeline on each question, LLM-judges faithfulness per claim |
-| `results/eval_report.json` | Written by evaluate.py: `{mean_faithfulness, per_question: [...]}` |
+| `scripts/generate_dataset.py` | One-time: generates 200 Q/A pairs from corpus chunks via Groq |
+| `data/eval_dataset.json` | `{id, question, reference_answer, source_chunk_id, context}` per entry |
+| `scripts/evaluate.py` | Runs full pipeline on 15 samples, scores with RAGAS |
+| `results/eval_report.json` | Written by evaluate.py: `{mean_faithfulness, mean_context_recall, per_question: [...]}` |
 | `scripts/ci_check.py` | Reads report, exits 1 if `mean_faithfulness < FAITHFULNESS_THRESHOLD` |
+| `scripts/test_apis.py` | 8-check pre-flight: Groq, HF embed, HF rerank, RAGAS wrappers, pipeline smoke |
 
-### Faithfulness algorithm
+### Pipeline
 
 ```
-for each sample:
-  run RAG pipeline → {answer, citations, retrieved_chunks}
-  split answer into sentences
-  for each sentence → LLM judge: "supported by context? YES/NO"
-  score = supported / total
-
-mean_faithfulness = avg across all samples
+evaluate.py per sample:
+  question → hybrid_retriever → reranker → generator → {answer, citations}
+  RAGAS: Faithfulness(answer, retrieved_contexts) + ContextRecall(answer, reference)
+  → per-sample scores → mean across all samples → eval_report.json
 ```
 
 ### Metrics
 
-| Metric | Method | Threshold |
-|--------|--------|-----------|
-| Faithfulness | LLM judge per claim | ≥ 0.75 |
-| Retrieval recall *(optional)* | reference chunk in top-k | ≥ 0.80 |
-| Answer relevance *(optional)* | LLM judge | ≥ 0.70 |
+| Metric | Method | Threshold | Actual |
+|--------|--------|-----------|--------|
+| Faithfulness | RAGAS LLM judge (LangchainLLMWrapper + Groq) | ≥ 0.75 | **1.000** |
+| Context recall | RAGAS LLM judge | — | **1.000** |
+
+### Deviations from original plan (intentional)
+
+- **15 samples evaluated** (not 200) — Groq free tier TPD limit is 100k tokens/day; 200 samples × 2 RAGAS metrics would exceed this. 15 samples stays under ~50k tokens.
+- **AnswerRelevancy dropped** — Groq API only supports `n=1` completions. RAGAS's `AnswerRelevancy` internally requests `n > 1` causing `BadRequestError`. Only `Faithfulness` + `ContextRecall` are used (both work with `n=1`).
+- **`max_workers=1` in RunConfig** — RAGAS default `max_workers=16` fires 16 concurrent Groq calls, immediately hitting the 12k TPM cap and causing all Faithfulness judge calls to timeout at 120s → `nan`. Sequential execution (`max_workers=1`) prevents this entirely.
+- **`LangchainLLMWrapper(ChatGroq(...))` kept** — RAGAS 0.4.3 has two incompatible metric APIs: `ragas.metrics` (old, works with `evaluate()`) and `ragas.metrics.collections` (new, incompatible with `evaluate()`). New metrics are not subclasses of `ragas.metrics.base.Metric` so `evaluate()` rejects them. Old API with deprecation warnings is the only working path.
+- **`PIPELINE_SLEEP=2s`** between pipeline calls to respect Groq + HF rate limits during the pipeline phase.
+- **`timeout=180`** (was 120) — gives Groq responses more breathing room under light rate limiting.
+
+### Definition of done — verified
+
+CI passed on GitHub Actions (run 26184924310):
+
+```
+Faithfulness:   1.000  (threshold: 0.75)
+Context recall: 1.000
+Samples: 15  |  Skipped: 0
+CI PASSED
+```
 
 ---
 
@@ -223,14 +240,15 @@ rag_ml/
 ├── scripts/
 │   ├── generate_dataset.py ← P3 NEW
 │   ├── evaluate.py         ← P3 NEW
-│   └── ci_check.py         ← P3 NEW
+│   ├── ci_check.py         ← P3 NEW
+│   └── test_apis.py        ← P3 NEW
 ├── data/
 │   └── eval_dataset.json   ← P3 NEW
 ├── results/
 │   └── eval_report.json    ← P3 written at runtime
 ├── build_index.py          ← P2 MODIFIED
 ├── query.py                ← P2 MODIFIED
-├── bm25_index.pkl          ← P2 written at runtime
+├── bm25_index/             ← P2 written at runtime (directory, not pkl)
 ├── requirements.txt        ← updated each phase
 └── IMPLEMENTATION_PLAN.md
 ```

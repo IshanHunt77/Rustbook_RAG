@@ -182,10 +182,29 @@ Type any Rust question at the prompt. Type `quit` to exit.
 
 ---
 
+## Evaluation (Phase 3)
+
+Every push runs an automated quality gate via GitHub Actions:
+
+1. The full RAG pipeline runs on 15 samples from `data/eval_dataset.json` (200 Q/A pairs generated from the corpus via Groq)
+2. RAGAS scores each answer for **faithfulness** (are claims grounded in retrieved context?) and **context recall** (did retrieval find the reference chunk?)
+3. CI fails if `mean_faithfulness < 0.75`
+
+**Current scores:** faithfulness `1.000` · context recall `1.000`
+
+| Script | Purpose |
+|---|---|
+| `scripts/generate_dataset.py` | One-time: generates 200 Q/A pairs from corpus chunks via Groq |
+| `scripts/evaluate.py` | Runs pipeline on eval samples, scores with RAGAS |
+| `scripts/ci_check.py` | Reads `results/eval_report.json`, exits 1 if below threshold |
+| `scripts/test_apis.py` | Pre-flight check — verifies all external APIs before triggering CI |
+
+---
+
 ## Project Status
 
 - **Phase 1** — Complete. Vector retrieval, HF embeddings, Groq LLM generation.
 - **Phase 2** — Complete. Hybrid BM25 + vector retrieval, RRF fusion, cross-encoder reranking, citations.
-- **Phase 3** — Planned. Evaluation dataset + faithfulness CI gate.
+- **Phase 3** — Complete. RAGAS evaluation dataset + faithfulness/context-recall CI gate. Passing at 1.000/1.000.
 
 See `IMPLEMENTATION_PLAN.md` for full technical details.
