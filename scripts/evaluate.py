@@ -110,7 +110,7 @@ def main():
     metrics = [Faithfulness(llm=ragas_llm), ContextRecall(llm=ragas_llm)]
 
     dataset = EvaluationDataset.from_list(ragas_rows)
-    run_config = RunConfig(timeout=120, max_retries=3)
+    run_config = RunConfig(timeout=180, max_retries=3, max_workers=1)
     result = evaluate(dataset, metrics=metrics, run_config=run_config)
 
     df = result.to_pandas()

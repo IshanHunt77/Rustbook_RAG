@@ -21,9 +21,8 @@ def main():
     threshold = report["faithfulness_threshold"]
     passed = report["passed"]
 
-    print(f"Faithfulness: {faith:.3f}  (threshold: {threshold})")
-    print(f"Answer relevancy: {report['mean_answer_relevancy']:.3f}")
-    print(f"Context recall:   {report['mean_context_recall']:.3f}")
+    print(f"Faithfulness:   {faith:.3f}  (threshold: {threshold})")
+    print(f"Context recall: {report['mean_context_recall']:.3f}")
     print(f"Samples: {report['n_samples']}  |  Skipped: {report['n_skipped']}")
 
     if passed:
